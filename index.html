@@ -340,9 +340,44 @@
 
         // --- CÀI ĐẶT CHUNG ---
         
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        // [SỬA LỖI CHO VERCEL]
+        // Các biến __firebase_config, __app_id, __initial_auth_token chỉ tồn tại trong môi trường Canvas.
+        // Khi bạn deploy lên Vercel, bạn CẦN PHẢI cung cấp config Firebase của CHÍNH BẠN.
+        
+        // 1. Lấy Firebase Config của bạn từ: https://console.firebase.google.com/ -> Project Settings -> General
+        // 2. Dán vào đây:
+        const VERCEL_FIREBASE_CONFIG = {
+             // <-- XÓA TOÀN BỘ CÁC DÒNG CHÚ THÍCH BÊN DƯỚI
+             // apiKey: "AIz... (Dán API Key của bạn vào đây)",
+             // authDomain: "your-project-id.firebaseapp.com (Dán authDomain của bạn vào đây)",
+             // projectId: "your-project-id (Dán projectId của bạn vào đây)",
+             // storageBucket: "your-project-id.appspot.com (Dán storageBucket của bạn vào đây)",
+             // messagingSenderId: "123... (Dán messagingSenderId của bạn vào đây)",
+             // appId: "1:123...:web:... (Dán appId của bạn vào đây)"
+             
+             // VÀ DÁN TOÀN BỘ NỘI DUNG BẠN SAO CHÉP Ở PHẦN 1 VÀO ĐÂY.
+             // SAU KHI DÁN, NÓ SẼ TRÔNG NHƯ THẾ NÀY (VỚI GIÁ TRỊ THẬT CỦA BẠN):
+
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyAHSN-tdIJict96e8fHTdzTchiDbVd2vik",
+  authDomain: "tra-phu-lieu-app.firebaseapp.com",
+  projectId: "tra-phu-lieu-app",
+  storageBucket: "tra-phu-lieu-app.firebasestorage.app",
+  messagingSenderId: "973609036679",
+  appId: "1:973609036679:web:ca2481673c05f77d0f4122",
+  measurementId: "G-D8H7HXMWEF"
+};
+             
+             
+        // 3. Đặt một App ID cho ứng dụng Vercel (để tạo đường dẫn cơ sở dữ liệu)
+        const VERCEL_APP_ID = "tra-phu-lieu-app"; // Bạn có thể giữ nguyên tên này
+
+        const isCanvasEnv = typeof __firebase_config !== 'undefined';
+        
+        const firebaseConfig = isCanvasEnv ? JSON.parse(__firebase_config) : VERCEL_FIREBASE_CONFIG;
+        const appId = isCanvasEnv ? __app_id : VERCEL_APP_ID;
+        const initialAuthToken = isCanvasEnv ? (typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null) : null; // Sẽ luôn là null trên Vercel
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
@@ -896,9 +931,14 @@
                     console.log("No user signed in. Attempting sign in...");
                     document.getElementById('userIdDisplay').textContent = "Đang kết nối...";
                     try {
+                        // [SỬA LỖI CHO VERCEL]
+                        // Trên Vercel, initialAuthToken sẽ LUÔN LUÔN là null.
+                        // Chúng ta sẽ luôn dùng signInAnonymously.
                         if (initialAuthToken) {
+                            // Chỉ chạy trong Canvas
                             await signInWithCustomToken(auth, initialAuthToken);
                         } else {
+                            // Sẽ chạy trên Vercel (và Canvas nếu token không có)
                             await signInAnonymously(auth);
                         }
                     } catch (error) {
@@ -994,5 +1034,7 @@ D            // --- Gắn sự kiện cho Chuyển Giao diện & Đăng nhập Q
     </script>
 </body>
 </html>
+
+
 
 
