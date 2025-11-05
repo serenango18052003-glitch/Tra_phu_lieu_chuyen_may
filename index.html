@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trả Phụ Liệu Chuyền May</title>
+    <!-- Tải Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tải thư viện SheetJS (xlsx) để xuất Excel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Tải thư viện icon (ionicons) -->
+    <script type="module" src="https://unpkg.com/ionicons@5.5.2/dist/ionicons/ionicons.esm.js"></script>
+    <script nomodule src="https://unpkg.com/ionicons@5.5.2/dist/ionicons/ionicons.js"></script>
+
+    <style>
+        /* Thêm font chữ Inter */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        
+        /* Tùy chỉnh thanh cuộn */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1ff; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb { background: #888; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+
+        /* Hộp thông báo */
+        .message-box {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            color: white;
+            z-index: 100; /* Cao hơn modal overlay */
+            display: none;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .message-box.success { background-color: #28a745; }
+        .message-box.error { background-color: #dc3545; }
+
+        /* Nút chuyển giao diện (active) */
+        .view-toggle-btn.active {
+            background-color: #3b82f6; /* blue-600 */
+            color: white;
+        }
+
+        /* [THÊM MỚI] Kiểu cho Edit Modal */
+        #editModalOverlay {
+            position: fixed;
+            inset: 0;
+            background-color: rgba(0, 0, 0, 0.75);
+            z-index: 60;
+        }
+        #editModal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 70;
+            width: 90%;
+            max-width: 48rem; /* 768px */
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 p-4 md:p-8">
+
+    <div class="max-w-6xl mx-auto">
+        
+        <!-- TIÊU ĐỀ ỨNG DỤNG -->
+        <header class="mb-6 text-center">
+            <h1 class="text-3xl font-bold text-blue-600">TRẢ PHỤ LIỆU CHUYỀN MAY</h1>
+            <p class="text-gray-600">Ứng dụng số hóa quy trình trả phụ liệu.</p>
+            <p class="text-sm text-gray-500 mt-2">UserID: <span id="userIdDisplay">Đang tải...</span></p>
+        </header>
+
+        <!-- HỘP THÔNG BÁO -->
+        <div id="messageBox" class="message-box">
+            <ion-icon name="checkmark-circle-outline" class="text-2xl" id="messageIcon"></ion-icon>
+            <span id="messageText"></span>
+        </div>
+
+        <!-- LOADING SPINNER -->
+        <div id="loadingSpinner" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+            <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-white"></div>
+        </div>
+
+        <!-- NÚT CHUYỂN GIAO DIỆN -->
+        <div class="flex justify-center mb-6 bg-white p-2 rounded-lg shadow-md max-w-md mx-auto">
+            <button id="showWorkerViewBtn" class="view-toggle-btn active w-1/2 py-2 px-4 rounded-md font-medium text-gray-700 hover:bg-blue-100 focus:outline-none">
+                Giao diện Công nhân
+            </button>
+            <button id="showManagerViewBtn" class="view-toggle-btn w-1/2 py-2 px-4 rounded-md font-medium text-gray-700 hover:bg-blue-100 focus:outline-none">
+                Giao diện Quản lý
+            </button>
+        </div>
+
+        <!-- [THÊM MỚI] KHUNG ĐĂNG NHẬP QUẢN LÝ (ẨN) -->
+        <div id="adminLoginSection" class="hidden max-w-md mx-auto bg-white p-4 rounded-lg shadow-md mb-6 transition-all duration-300">
+            <h3 class="font-medium text-center text-gray-700 mb-3">Mở khóa Giao diện Quản lý</h3>
+            <label for="adminPassword" class="block text-sm font-medium text-gray-600">Mật khẩu Quản lý:</label>
+            <input type="password" id="adminPassword" class="w-full mt-1 p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+            <button id="adminLoginBtn" class="w-full mt-3 py-2 px-4 bg-blue-600 text-white rounded-md font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                Mở khóa
+            </button>
+            <p class="text-xs text-gray-500 mt-2 text-center">Mật khẩu demo là: <code class="bg-gray-200 px-1 rounded">123456789</code></p>
+        </div>
+
+
+        <!-- GIAO DIỆN CÔNG NHÂN -->
+        <div id="workerView">
+            <!-- PHẦN 1: FORM CHO CÔNG NHÂN -->
+            <div class="bg-white p-6 rounded-lg shadow-md mb-8">
+                <h2 class="text-2xl font-semibold text-gray-700 border-b pb-3 mb-4">1. Phiếu Trả Phụ Liệu</h2>
+                <form id="reportForm">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                        <!-- Nhóm -->
+                        <div>
+                            <label for="group" class="block text-sm font-medium text-gray-700 mb-1">Nhóm <span class="text-red-500">*</span></label>
+                            <select id="group" name="group" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" required>
+                                <option value="">-- Chọn nhóm --</option>
+                                <option value="Nhóm 1">Nhóm 1</option>
+                                <option value="Nhóm 2">Nhóm 2</option>
+                            </select>
+                        </div>
+                        <!-- Chuyền (Line) -->
+                        <div>
+                            <label for="line" class="block text-sm font-medium text-gray-700 mb-1">Chuyền (Line) <span class="text-red-500">*</span></label>
+                            <input type="text" id="line" name="line" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" required>
+                        </div>
+                        <!-- Người Trả -->
+                        <div>
+                            <label for="returner" class="block text-sm font-medium text-gray-700 mb-1">Người Trả <span class="text-red-500">*</span></label>
+                            <input type="text" id="returner" name="returner" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" required>
+                        </div>
+                    </div>
+                    <!-- Ngày (ẩn, tự động lấy ngày hiện tại) -->
+                    <input type="hidden" id="date" name="date">
+
+                    <!-- Bảng Phụ Liệu -->
+                    <h3 class="text-lg font-medium text-gray-700 mt-6 mb-2">Chi tiết phụ liệu:</h3>
+                    <div class="overflow-x-auto mb-4">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Đơn hàng</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tên phụ liệu</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Số lượng</th>
+                                    <th class="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Sử dụng lại</th>
+                                    <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Xóa</th>
+                                </tr>
+                            </thead>
+                            <tbody id="materialsTableBody" class="bg-white divide-y divide-gray-200">
+                                <!-- Dòng mẫu, sẽ được thêm bằng JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="flex justify-between items-center">
+                        <button type="button" id="addRowBtn" class="px-4 py-2 bg-green-600 text-white rounded-md shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 flex items-center gap-2">
+                            <ion-icon name="add-circle-outline"></ion-icon>
+                            Thêm dòng
+                        </button>
+                        <button type="submit" id="submitReportBtn" class="px-6 py-2 bg-blue-600 text-white font-semibold rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center gap-2">
+                            <ion-icon name="send-outline"></ion-icon>
+                            Nộp Báo Cáo
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- LỊCH SỬ PHIẾU CỦA CÔNG NHÂN -->
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-2xl font-semibold text-gray-700 border-b pb-3 mb-4">Lịch sử phiếu đã nộp (của bạn)</h2>
+                <div id="workerHistoryContainer" class="space-y-4">
+                    <p class="text-gray-500 text-center">Đang tải lịch sử...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- GIAO DIỆN QUẢN LÝ (ẨN) -->
+        <div id="managerView" class="hidden">
+            <!-- PHẦN 2: DASHBOARD CHO QUẢN LÝ (LEAD) -->
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-2xl font-semibold text-gray-700 border-b pb-3 mb-4">2. Bảng Điều Khiển (Quản lý)</h2>
+                
+                <!-- [SỬA ĐỔI] Input Tên Người Xử Lý -->
+                <div class="mb-4 bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-3 rounded-md">
+                    <label for="handlerNameInput" class="block text-sm font-medium text-blue-900 mb-1">Tên Người Xử Lý (Dùng khi Duyệt/Từ chối): <span class="text-red-500">*</span></label>
+                    <input type="text" id="handlerNameInput" placeholder="Nhập tên của bạn, VD: Chị A..." class="w-full md:w-1/2 px-3 py-2 border border-blue-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" required>
+                    <p class="text-xs mt-1 text-blue-800">Tên này sẽ được lưu lại khi bạn duyệt hoặc từ chối phiếu.</p>
+                </div>
+
+                <!-- [SỬA ĐỔI] Nút xuất Excel -->
+                <div class="flex justify-end mb-4 gap-3">
+                    <button id="exportExcelBtnGroup1" class="px-4 py-2 bg-teal-600 text-white rounded-md shadow-sm hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 flex items-center gap-2 ml-auto">
+                        <ion-icon name="download-outline"></ion-icon>
+                        Xuất Excel (Nhóm 1)
+                    </button>
+                    <button id="exportExcelBtnGroup2" class="px-4 py-2 bg-teal-700 text-white rounded-md shadow-sm hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-600 flex items-center gap-2">
+                        <ion-icon name="download-outline"></ion-icon>
+                        Xuất Excel (Nhóm 2)
+                    </button>
+                </div>
+
+                <!-- [SỬA ĐỔI] Tabs điều hướng (Thêm 2 tab Từ chối) -->
+                <div class="mb-4 border-b border-gray-200">
+                    <nav class="flex flex-wrap -mb-px space-x-6" aria-label="Tabs">
+                        <button id="tabPending1" class="tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-blue-500 text-blue-600">
+                            Chờ duyệt (Nhóm 1)
+                        </button>
+                        <button id="tabPending2" class="tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                            Chờ duyệt (Nhóm 2)
+                        </button>
+                        <button id="tabApproved1" class="tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                            Đã duyệt (Nhóm 1)
+                        </button>
+                        <button id="tabApproved2" class="tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                            Đã duyệt (Nhóm 2)
+                        </button>
+                        <button id="tabRejected1" class="tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                            Đã từ chối (Nhóm 1)
+                        </button>
+                        <button id="tabRejected2" class="tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                            Đã từ chối (Nhóm 2)
+                        </button>
+                    </nav>
+                </div>
+                
+                <!-- Khu vực hiển thị nội dung các tab -->
+                <div id="tabContentContainer" class="space-y-4">
+                    <!-- Nội dung sẽ được tải bằng JS -->
+                    <p class="text-gray-500 text-center">Đang tải dữ liệu...</p>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- [THÊM MỚI] MODAL CHỈNH SỬA (ẨN) -->
+    <div id="editModal" class="hidden">
+        <!-- Lớp phủ nền -->
+        <div id="editModalOverlay" class="fixed inset-0 bg-black bg-opacity-75"></div>
+        
+        <!-- Nội dung Modal -->
+        <div id="editModal" class="bg-white rounded-lg shadow-xl p-6 z-50">
+            <div class="flex justify-between items-center border-b pb-3 mb-4">
+                <h3 class="text-xl font-semibold text-gray-800">Chỉnh Sửa Phiếu</h3>
+                <button id="editModalCancelBtn" class="text-gray-400 hover:text-gray-600">
+                    <ion-icon name="close-outline" class="text-3xl"></ion-icon>
+                </button>
+            </div>
+            
+            <!-- Form chỉnh sửa -->
+            <form id="editForm">
+                <input type="hidden" id="editDocId">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                    <!-- Nhóm -->
+                    <div>
+                        <label for="editGroup" class="block text-sm font-medium text-gray-700 mb-1">Nhóm <span class="text-red-500">*</span></label>
+                        <select id="editGroup" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" required>
+                            <option value="Nhóm 1">Nhóm 1</option>
+                            <option value="Nhóm 2">Nhóm 2</option>
+                        </select>
+                    </div>
+                    <!-- Chuyền (Line) -->
+                    <div>
+                        <label for="editLine" class="block text-sm font-medium text-gray-700 mb-1">Chuyền (Line) <span class="text-red-500">*</span></label>
+                        <input type="text" id="editLine" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" required>
+                    </div>
+                    <!-- Người Trả -->
+                    <div>
+                        <label for="editReturner" class="block text-sm font-medium text-gray-700 mb-1">Người Trả <span class="text-red-500">*</span></label>
+                        <input type="text" id="editReturner" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" required>
+                    </div>
+                </div>
+
+                <!-- Bảng Phụ Liệu (trong Modal) -->
+                <h3 class="text-lg font-medium text-gray-700 mt-6 mb-2">Chi tiết phụ liệu:</h3>
+                <div class="overflow-x-auto mb-4" style="max-height: 250px; overflow-y: auto;">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50 sticky top-0">
+                            <tr>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Đơn hàng</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tên phụ liệu</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Số lượng</th>
+                                <th class="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Sử dụng lại</th>
+                                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Xóa</th>
+                            </tr>
+                        </thead>
+                        <tbody id="editMaterialsTableBody" class="bg-white divide-y divide-gray-200">
+                            <!-- Dòng sẽ được thêm bằng JS -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="flex justify-between items-center mt-6 pt-4 border-t">
+                    <button type="button" id="editModalAddRowBtn" class="px-4 py-2 bg-green-600 text-white rounded-md shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 flex items-center gap-2">
+                        <ion-icon name="add-circle-outline"></ion-icon>
+                        Thêm dòng
+                    </button>
+                    <button type="button" id="editModalSaveBtn" class="px-6 py-2 bg-blue-600 text-white font-semibold rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center gap-2">
+                        <ion-icon name="save-outline"></ion-icon>
+                        Lưu Thay Đổi
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        // Import các hàm Firebase cần thiết
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { 
+            getAuth, 
+            signInAnonymously, 
+            onAuthStateChanged,
+            signInWithCustomToken
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            collection, 
+            addDoc, 
+            query, 
+            where, 
+            onSnapshot, 
+            doc, 
+            updateDoc, 
+            serverTimestamp,
+            getDocs,
+            getDoc, // [THÊM MỚI]
+            Timestamp,
+            setLogLevel
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- CÀI ĐẶT CHUNG ---
+        
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        setLogLevel('Debug'); 
+
+        // Biến toàn cục
+        let currentUserId = null;
+        const SUBMISSIONS_COLLECTION = `/artifacts/${appId}/public/data/materialReturns`;
+        let currentActiveTab = 'tabPending1'; 
+        let unsubscribeListeners = []; 
+        let unsubscribeWorkerHistory = null; 
+
+        // [THÊM MỚI] Mật khẩu quản lý (có thể thay đổi)
+        const _MANAGEMENT_SECRET_KEY_ = "123456789";
+
+        // --- CÁC HÀM TIỆN ÍCH ---
+
+        function showMessage(type, text) {
+            const messageBox = document.getElementById('messageBox');
+            const messageText = document.getElementById('messageText');
+            const messageIcon = document.getElementById('messageIcon');
+            messageText.textContent = text;
+            messageBox.className = 'message-box'; // Reset
+            if (type === 'success') {
+                messageBox.classList.add('success');
+                messageIcon.setAttribute('name', 'checkmark-circle-outline');
+            } else {
+                messageBox.classList.add('error');
+                messageIcon.setAttribute('name', 'alert-circle-outline');
+            }
+            messageBox.style.display = 'flex';
+            setTimeout(() => { messageBox.style.display = 'none'; }, 3000);
+        }
+
+        // [SỬA LỖI - THÊM LẠI]
+        function showLoading(isLoading) {
+            document.getElementById('loadingSpinner').style.display = isLoading ? 'flex' : 'none';
+        }
+
+        // [SỬA LỖI - THÊM LẠI]
+        function formatDate(date) {
+            if (!date) return 'N/A';
+            if (date instanceof Timestamp) {
+                date = date.toDate();
+            } else if (typeof date === 'string') {
+                date = new Date(date);
+            }
+            if (isNaN(date.getTime())) { return 'Ngày không hợp lệ'; }
+            return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        }
+
+
+        // [SỬA LỖI - THÊM LẠI] --- PHẦN 1: LOGIC FORM CÔNG NHÂN ---
+
+        // [SỬA LỖI - THÊM LẠI] Thêm dòng mới vào bảng phụ liệu (Form chính)
+        function addMaterialRow() {
+            const tableBody = document.getElementById('materialsTableBody');
+            const newRow = document.createElement('tr');
+            newRow.innerHTML = `
+                <td class="px-2 py-2 whitespace-nowrap"><input type="text" placeholder="VD: DH123" class="material-order w-full border-gray-300 rounded-md p-2" required></td>
+                <td class="px-2 py-2 whitespace-nowrap"><input type="text" placeholder="VD: Chỉ may" class="material-name w-full border-gray-300 rounded-md p-2" required></td>
+                <td class="px-2 py-2 whitespace-nowrap"><input type="number" min="1" placeholder="0" class="material-quantity w-full border-gray-300 rounded-md p-2" required></td>
+                <td class="px-2 py-2 whitespace-nowrap text-center"><input type="checkbox" class="material-reuse h-5 w-5 text-blue-600 border-gray-300 rounded"></td>
+                <td class="px-2 py-2 whitespace-nowrap text-right">
+                    <button type="button" class="delete-row-btn text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-100">
+                        <ion-icon name="trash-outline" class="text-xl align-middle"></ion-icon>
+                    </button>
+                </td>
+            `;
+            tableBody.appendChild(newRow);
+            newRow.querySelector('.delete-row-btn').addEventListener('click', () => { newRow.remove(); });
+        }
+
+        // [SỬA LỖI - THÊM LẠI] Xử lý nộp form
+        async function handleSubmitReport(e) {
+            e.preventDefault();
+            if (!currentUserId) {
+                showMessage('error', 'Chưa xác thực người dùng. Vui lòng thử lại.');
+                return;
+            }
+            showLoading(true);
+            const form = document.getElementById('reportForm');
+            const materials = [];
+            const rows = document.querySelectorAll('#materialsTableBody tr');
+            
+            if (rows.length === 0) {
+                showMessage('error', 'Phải có ít nhất một dòng phụ liệu.');
+                showLoading(false);
+                return;
+            }
+            let hasError = false;
+            rows.forEach(row => {
+                const order = row.querySelector('.material-order').value;
+                const name = row.querySelector('.material-name').value;
+                const quantity = row.querySelector('.material-quantity').value;
+                const reuse = row.querySelector('.material-reuse').checked;
+                if (!order || !name || !quantity) { hasError = true; }
+                materials.push({ order, name, quantity: parseInt(quantity), reuse });
+            });
+            if (hasError) {
+                showMessage('error', 'Vui lòng điền đầy đủ thông tin các dòng phụ liệu.');
+                showLoading(false);
+                return;
+            }
+
+            const reportData = {
+                group: form.group.value,
+                line: form.line.value,
+                returner: form.returner.value,
+                date: new Date().toISOString().split('T')[0], 
+                status: "Chờ duyệt",
+                submittedAt: serverTimestamp(),
+                submittedBy: currentUserId,
+                materials: materials,
+                handledBy: null,
+                handledAt: null,
+                handledByName: null
+            };
+
+            try {
+                const docRef = await addDoc(collection(db, SUBMISSIONS_COLLECTION), reportData);
+                console.log("Document written with ID: ", docRef.id);
+                showMessage('success', 'Nộp báo cáo thành công!');
+                form.reset();
+                document.getElementById('materialsTableBody').innerHTML = '';
+                addMaterialRow(); 
+            } catch (error) {
+                console.error("Error adding document: ", error);
+                showMessage('error', 'Lỗi khi nộp báo cáo: ' + error.message);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // [SỬA LỖI - THÊM LẠI] TẢI LỊCH SỬ CHO CÔNG NHÂN
+        function fetchWorkerHistory(userId) {
+            if (unsubscribeWorkerHistory) { unsubscribeWorkerHistory(); }
+            const container = document.getElementById('workerHistoryContainer');
+            container.innerHTML = `<p class="text-gray-500 text-center">Đang tải lịch sử...</p>`;
+            const q = query(collection(db, SUBMISSIONS_COLLECTION), where("submittedBy", "==", userId));
+            
+            unsubscribeWorkerHistory = onSnapshot(q, (querySnapshot) => {
+                if (querySnapshot.empty) {
+                    container.innerHTML = `<p class="text-gray-500 text-center">Bạn chưa nộp phiếu nào.</p>`;
+                    return;
+                }
+                container.innerHTML = ''; 
+                querySnapshot.forEach((doc) => {
+                    container.appendChild(createSubmissionCard(doc.id, doc.data(), false));
+                });
+            }, (error) => {
+                console.error("Error fetching worker history: ", error);
+                container.innerHTML = `<p class="text-red-500 text-center">Lỗi tải lịch sử.</p>`;
+            });
+        }
+
+
+        // [SỬA LỖI - THÊM LẠI] --- PHẦN 2: LOGIC DASHBOARD QUẢN LÝ ---
+
+        // [SỬA LỖI - THÊM LẠI]
+        function clearManagerListeners() {
+            unsubscribeListeners.forEach(unsub => unsub());
+            unsubscribeListeners = [];
+        }
+
+        // [SỬA LỖI - THÊM LẠI] Tải dữ liệu cho các tab (Quản lý)
+        function fetchManagerSubmissions(status, group = null) {
+            clearManagerListeners(); 
+            const container = document.getElementById('tabContentContainer');
+            container.innerHTML = `<p class="text-gray-500 text-center">Đang tải dữ liệu...</p>`;
+            let q;
+            const collectionRef = collection(db, SUBMISSIONS_COLLECTION);
+
+            if (group) {
+                q = query(collectionRef, where("status", "==", status), where("group", "==", group));
+            } else {
+                q = query(collectionRef, where("status", "==", status));
+            }
+            
+            const unsubscribe = onSnapshot(q, (querySnapshot) => {
+                if (querySnapshot.empty) {
+                    container.innerHTML = `<p class="text-gray-500 text-center">Không có dữ liệu.</p>`;
+                    return;
+                }
+                container.innerHTML = ''; 
+                querySnapshot.forEach((doc) => {
+                    container.appendChild(createSubmissionCard(doc.id, doc.data(), true));
+                });
+            }, (error) => {
+                console.error("Error fetching submissions: ", error);
+                container.innerHTML = `<p class="text-red-500 text-center">Lỗi tải dữ liệu.</p>`;
+            });
+            unsubscribeListeners.push(unsubscribe); 
+        }
+
+        // [SỬA LỖI - THÊM LẠI] Tạo thẻ (card) hiển thị thông tin phiếu
+        function createSubmissionCard(docId, data, isManagerView = false) {
+            const card = document.createElement('div');
+            card.className = 'bg-white border border-gray-200 rounded-lg shadow-sm p-4 space-y-3';
+            
+            let statusBadge;
+            if (data.status === 'Chờ duyệt') {
+                statusBadge = `<span class="px-2 py-0.5 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">Chờ duyệt</span>`;
+            } else if (data.status === 'Đã duyệt') {
+                statusBadge = `<span class="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-800">Đã duyệt</span>`;
+            } else { // Đã từ chối
+                statusBadge = `<span class="px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 text-red-800">Đã từ chối</span>`;
+            }
+
+            let materialsHtml = '<ul class="list-disc list-inside text-sm text-gray-600 pl-4 space-y-1 mt-2">';
+            data.materials.forEach(m => {
+                materialsHtml += `<li><strong>${m.name}</strong> (ĐH: ${m.order}) - SL: ${m.quantity} - ${m.reuse ? 'Sử dụng lại' : 'Không sử dụng lại'}</li>`;
+            });
+            materialsHtml += '</ul>';
+
+            let actionButtons = '';
+            if (isManagerView) {
+                // Nút Sửa (luôn có)
+                actionButtons += `
+                    <button data-id="${docId}" class="edit-btn p-2 bg-yellow-500 text-white text-sm font-medium rounded-md shadow-sm hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-400" title="Chỉnh sửa">
+                        <ion-icon name="pencil-outline" class="text-lg align-middle"></ion-icon>
+                    </button>
+                `;
+                
+                if (data.status === 'Chờ duyệt') {
+                    // Nút Duyệt
+                    actionButtons += `
+                        <button data-id="${docId}" class="approve-btn p-2 bg-green-600 text-white text-sm font-medium rounded-md shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500" title="Duyệt">
+                            <ion-icon name="checkmark-done-outline" class="text-lg align-middle"></ion-icon>
+                        </button>
+                    `;
+                    // Nút Từ chối
+                    actionButtons += `
+                        <button data-id="${docId}" class="reject-btn p-2 bg-red-600 text-white text-sm font-medium rounded-md shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500" title="Từ chối">
+                            <ion-icon name="close-circle-outline" class="text-lg align-middle"></ion-icon>
+                        </button>
+                    `;
+                }
+            }
+
+            let handlerInfo = '';
+            if (data.status === 'Đã duyệt' || data.status === 'Đã từ chối') {
+                const actionText = data.status === 'Đã duyệt' ? 'Người duyệt' : 'Người từ chối';
+                handlerInfo = `
+                <div class="text-sm ${data.status === 'Đã duyệt' ? 'text-green-700' : 'text-red-700'} pt-2 border-t border-gray-100">
+                    <p>${actionText}: <span class="font-medium">${data.handledByName ? data.handledByName : (data.handledBy ? data.handledBy.substring(0, 8) + '...' : 'N/A')}</span></p>
+                    <p>Ngày xử lý: ${formatDate(data.handledAt)}</p>
+                </div>
+                `;
+            }
+
+            card.innerHTML = `
+                <div class="flex justify-between items-start">
+                    <div>
+                        <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-800">${data.group} / ${data.line}</span>
+                        ${statusBadge}
+                    </div>
+                    <div class="text-sm text-gray-500 text-right">
+                        <p>Ngày nộp: ${formatDate(data.date)}</p>
+                        <p>Người nộp: ${data.returner}</p>
+                    </div>
+                </div>
+                <div>
+                    <h4 class="font-medium text-gray-800">Chi tiết phụ liệu:</h4>
+                    ${materialsHtml}
+                </div>
+                ${handlerInfo}
+                <div class="flex justify-end pt-3 border-t border-gray-100 mt-3 gap-2">
+                    ${actionButtons}
+                </div>
+            `;
+            return card;
+        }
+
+        // [SỬA LỖI - THÊM LẠI] Xử lý chuyển tab
+        function handleTabClick(tabId) {
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('border-blue-500', 'text-blue-600');
+                btn.classList.add('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
+            });
+            
+            const activeBtn = document.getElementById(tabId);
+            activeBtn.classList.add('border-blue-500', 'text-blue-600');
+            activeBtn.classList.remove('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
+
+            currentActiveTab = tabId;
+
+            if (tabId === 'tabPending1') {
+                fetchManagerSubmissions('Chờ duyệt', 'Nhóm 1');
+            } else if (tabId === 'tabPending2') {
+                fetchManagerSubmissions('Chờ duyệt', 'Nhóm 2');
+            } else if (tabId === 'tabApproved1') {
+                fetchManagerSubmissions('Đã duyệt', 'Nhóm 1');
+            } else if (tabId === 'tabApproved2') {
+                fetchManagerSubmissions('Đã duyệt', 'Nhóm 2');
+            } else if (tabId === 'tabRejected1') {
+                fetchManagerSubmissions('Đã từ chối', 'Nhóm 1');
+            } else if (tabId === 'tabRejected2') {
+                fetchManagerSubmissions('Đã từ chối', 'Nhóm 2');
+            }
+        }
+
+        // [SỬA LỖI - THÊM LẠI] Lấy tên người xử lý
+        function getHandlerInfo() {
+            const handlerName = document.getElementById('handlerNameInput').value;
+            if (!handlerName || handlerName.trim() === '') {
+                showMessage('error', 'Lỗi: Vui lòng nhập "Tên Người Xử Lý" ở đầu mục 2.');
+                document.getElementById('handlerNameInput').focus();
+                return null;
+            }
+            return {
+                handledBy: currentUserId,
+                handledByName: handlerName.trim(),
+                handledAt: serverTimestamp()
+            };
+        }
+
+        // [SỬA LỖI - THÊM LẠI] Xử lý duyệt phiếu
+        async function handleApproveClick(e) {
+            const button = e.target.closest('.approve-btn');
+            const docId = button.dataset.id;
+            const handlerInfo = getHandlerInfo(); // Lấy thông tin người duyệt
+            if (!docId || !handlerInfo) return;
+
+            console.log(`Đang duyệt phiếu: ${docId} bởi ${handlerInfo.handledByName}`);
+            showLoading(true);
+            try {
+                const docRef = doc(db, SUBMISSIONS_COLLECTION, docId);
+                await updateDoc(docRef, {
+                    status: "Đã duyệt",
+                    ...handlerInfo // Thêm thông tin người duyệt
+                });
+                showMessage('success', 'Đã duyệt phiếu thành công.');
+            } catch (error) {
+                console.error("Error approving document: ", error);
+                showMessage('error', 'Lỗi khi duyệt phiếu: ' + error.message);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // [SỬA LỖI - THÊM LẠI] Xử lý từ chối phiếu
+        async function handleRejectClick(e) {
+            const button = e.target.closest('.reject-btn');
+            const docId = button.dataset.id;
+            const handlerInfo = getHandlerInfo(); // Lấy thông tin người từ chối
+            if (!docId || !handlerInfo) return;
+
+            console.log(`Đang từ chối phiếu: ${docId} bởi ${handlerInfo.handledByName}`);
+            showLoading(true);
+            try {
+                const docRef = doc(db, SUBMISSIONS_COLLECTION, docId);
+                await updateDoc(docRef, {
+                    status: "Đã từ chối",
+                    ...handlerInfo // Thêm thông tin người từ chối
+                });
+                showMessage('success', 'Đã từ chối phiếu.');
+            } catch (error) {
+                console.error("Error rejecting document: ", error);
+                showMessage('error', 'Lỗi khi từ chối phiếu: ' + error.message);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // [SỬA LỖI - THÊM LẠI] Thêm dòng mới vào bảng (Modal Sửa)
+        function addEditMaterialRow(material = null) {
+            const tableBody = document.getElementById('editMaterialsTableBody');
+            const newRow = document.createElement('tr');
+            newRow.innerHTML = `
+                <td class="px-2 py-2"><input type="text" value="${material ? material.order : ''}" placeholder="VD: DH123" class="edit-material-order w-full border-gray-300 rounded-md p-2" required></td>
+                <td class="px-2 py-2"><input type="text" value="${material ? material.name : ''}" placeholder="VD: Chỉ may" class="edit-material-name w-full border-gray-300 rounded-md p-2" required></td>
+                <td class="px-2 py-2"><input type="number" value="${material ? material.quantity : ''}" min="1" placeholder="0" class="edit-material-quantity w-full border-gray-300 rounded-md p-2" required></td>
+                <td class="px-2 py-2 text-center"><input type="checkbox" ${material && material.reuse ? 'checked' : ''} class="edit-material-reuse h-5 w-5 text-blue-600 border-gray-300 rounded"></td>
+                <td class="px-2 py-2 text-right">
+                    <button type="button" class="delete-edit-row-btn text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-100">
+                        <ion-icon name="trash-outline" class="text-xl align-middle"></ion-icon>
+                    </button>
+                </td>
+            `;
+            tableBody.appendChild(newRow);
+            // Gắn sự kiện xóa cho nút mới trong modal
+            newRow.querySelector('.delete-edit-row-btn').addEventListener('click', () => {
+                newRow.remove();
+            });
+        }
+
+        // [SỬA LỖI - THÊM LẠI] Xử lý mở modal Sửa
+        async function handleEditClick(e) {
+            const button = e.target.closest('.edit-btn');
+            const docId = button.dataset.id;
+            if (!docId) return;
+            
+            showLoading(true);
+            try {
+                const docRef = doc(db, SUBMISSIONS_COLLECTION, docId);
+                const docSnap = await getDoc(docRef);
+                if (!docSnap.exists()) {
+                    showMessage('error', 'Không tìm thấy phiếu này.');
+                    return;
+                }
+                const data = docSnap.data();
+
+                // Đổ dữ liệu vào form modal
+                document.getElementById('editDocId').value = docId;
+                document.getElementById('editGroup').value = data.group;
+                document.getElementById('editLine').value = data.line;
+                document.getElementById('editReturner').value = data.returner;
+
+                // Xóa các dòng cũ và thêm dòng mới
+                const tableBody = document.getElementById('editMaterialsTableBody');
+                tableBody.innerHTML = '';
+                data.materials.forEach(material => {
+                    addEditMaterialRow(material);
+                });
+
+                // Hiển thị modal
+                document.getElementById('editModal').classList.remove('hidden');
+
+            } catch (error) {
+                console.error("Error opening edit modal: ", error);
+                showMessage('error', 'Lỗi khi mở form sửa: ' + error.message);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // [SỬA LỖI - THÊM LẠI] Xử lý Lưu thay đổi từ Modal Sửa
+        async function handleSaveEdit() {
+            showLoading(true);
+            const docId = document.getElementById('editDocId').value;
+            if (!docId) {
+                showMessage('error', 'Lỗi: Mất ID phiếu.');
+                showLoading(false);
+                return;
+            }
+
+            // Thu thập dữ liệu từ modal
+            const materials = [];
+            const rows = document.querySelectorAll('#editMaterialsTableBody tr');
+            let hasError = false;
+            rows.forEach(row => {
+                const order = row.querySelector('.edit-material-order').value;
+                const name = row.querySelector('.edit-material-name').value;
+                const quantity = row.querySelector('.edit-material-quantity').value;
+                const reuse = row.querySelector('.edit-material-reuse').checked;
+                if (!order || !name || !quantity) { hasError = true; }
+                materials.push({ order, name, quantity: parseInt(quantity), reuse });
+            });
+
+            if (hasError) {
+                showMessage('error', 'Vui lòng điền đầy đủ thông tin các dòng phụ liệu.');
+                showLoading(false);
+                return;
+            }
+
+            const updatedData = {
+                group: document.getElementById('editGroup').value,
+                line: document.getElementById('editLine').value,
+                returner: document.getElementById('editReturner').value,
+                materials: materials
+                // Không thay đổi status hoặc thông tin người duyệt ở đây
+            };
+
+            try {
+                const docRef = doc(db, SUBMISSIONS_COLLECTION, docId);
+                await updateDoc(docRef, updatedData);
+                showMessage('success', 'Cập nhật phiếu thành công.');
+                document.getElementById('editModal').classList.add('hidden');
+            } catch (error) {
+                console.error("Error updating document: ", error);
+                showMessage('error', 'Lỗi khi cập nhật phiếu: ' + error.message);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // [SỬA ĐỔI] Xử lý xuất Excel (theo từng nhóm)
+        async function handleExportExcel(groupName) {
+            showLoading(true);
+            try {
+                // [SỬA ĐỔI] Query theo cả status và groupName
+                const q = query(collection(db, SUBMISSIONS_COLLECTION), 
+                                where("status", "==", "Đã duyệt"),
+                                where("group", "==", groupName)
+                            );
+                const querySnapshot = await getDocs(q);
+
+                if (querySnapshot.empty) {
+                    showMessage('error', `Không có dữ liệu "Đã duyệt" cho ${groupName}.`);
+                    showLoading(false);
+                    return;
+                }
+
+                // [SỬA ĐỔI] Chỉ cần 1 mảng dữ liệu
+                const excelData = [];
+
+                querySnapshot.forEach(doc => {
+                    const data = doc.data();
+                    const commonData = {
+                        "Chuyền": data.line,
+                        "Người Trả": data.returner,
+                        "Ngày Nộp": formatDate(data.date),
+                        "Người Duyệt": data.handledByName || 'N/A', 
+                        "Ngày Duyệt": formatDate(data.handledAt), 
+                        "Trạng Thái": data.status,
+                        "Người Duyệt (ID)": data.handledBy, 
+                    };
+                    
+                    // [SỬA ĐỔI] Không cần if/else, chỉ cần push vào mảng
+                    data.materials.forEach(m => {
+                        const rowData = { ...commonData, "Đơn Hàng": m.order, "Tên Phụ Liệu": m.name, "Số Lượng": m.quantity, "Sử Dụng Lại": m.reuse ? "Có" : "Không" };
+                        excelData.push(rowData);
+                    });
+                });
+
+                // [SỬA ĐỔI] Tạo file Excel với chỉ 1 sheet
+                const wb = XLSX.utils.book_new();
+                const ws = XLSX.utils.json_to_sheet(excelData.length ? excelData : [{"Thông báo": `Không có dữ liệu cho ${groupName}`}]);
+                XLSX.utils.book_append_sheet(wb, ws, groupName); // Tên sheet là "Nhóm 1" hoặc "Nhóm 2"
+
+                // [SỬA ĐỔI] Tên file động
+                const fileName = `BaoCao_TraPhuLieu_${groupName.replace(' ', '_')}.xlsx`;
+                XLSX.writeFile(wb, fileName);
+                
+                showMessage('success', `Xuất Excel ${groupName} thành công!`);
+            } catch (error) {
+                console.error("Error exporting Excel: ", error);
+                showMessage('error', 'Lỗi khi xuất Excel: ' + error.message);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // --- KHỞI CHẠY ỨNG DỤNG ---
+        document.addEventListener('DOMContentLoaded', () => {
+            
+            // --- Xác thực ---
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    currentUserId = user.uid;
+                    document.getElementById('userIdDisplay').textContent = currentUserId;
+                    console.log("User authenticated with UID:", currentUserId);
+                    
+                    // Tải dữ liệu cho cả 2 view
+                    handleTabClick(currentActiveTab); // Quản lý
+                    fetchWorkerHistory(currentUserId); // Công nhân
+
+                } else {
+                    console.log("No user signed in. Attempting sign in...");
+                    document.getElementById('userIdDisplay').textContent = "Đang kết nối...";
+                    try {
+                        if (initialAuthToken) {
+                            await signInWithCustomToken(auth, initialAuthToken);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (error) {
+                        console.error("Authentication error: ", error);
+                        document.getElementById('userIdDisplay').textContent = "Lỗi xác thực";
+                        showMessage('error', 'Lỗi xác thực: ' + error.message);
+                    }
+                }
+            });
+
+            // --- Gắn sự kiện cho Form Công nhân ---
+            document.getElementById('addRowBtn').addEventListener('click', addMaterialRow);
+            document.getElementById('reportForm').addEventListener('submit', handleSubmitReport);
+            addMaterialRow(); 
+
+            // --- Gắn sự kiện cho Dashboard Quản lý ---
+            document.getElementById('tabPending1').addEventListener('click', () => handleTabClick('tabPending1'));
+            document.getElementById('tabPending2').addEventListener('click', () => handleTabClick('tabPending2'));
+            document.getElementById('tabApproved1').addEventListener('click', () => handleTabClick('tabApproved1'));
+            document.getElementById('tabApproved2').addEventListener('click', () => handleTabClick('tabApproved2'));
+            document.getElementById('tabRejected1').addEventListener('click', () => handleTabClick('tabRejected1')); // [THÊM MỚI]
+            document.getElementById('tabRejected2').addEventListener('click', () => handleTabClick('tabRejected2')); // [THÊM MỚI]
+            
+            // [SỬA ĐỔI] Listener chung cho các nút (Duyệt, Từ chối, Sửa)
+            document.getElementById('managerView').addEventListener('click', (e) => {
+                if (e.target.closest('.approve-btn')) {
+                    handleApproveClick(e);
+                } else if (e.target.closest('.reject-btn')) {
+                    handleRejectClick(e); 
+                } else if (e.target.closest('.edit-btn')) {
+                    handleEditClick(e); 
+                }
+            });
+            
+            // [SỬA ĐỔI] Gắn sự kiện cho 2 nút Excel mới
+            document.getElementById('exportExcelBtnGroup1').addEventListener('click', () => handleExportExcel('Nhóm 1'));
+            document.getElementById('exportExcelBtnGroup2').addEventListener('click', () => handleExportExcel('Nhóm 2'));
+
+D            // --- Gắn sự kiện cho Chuyển Giao diện & Đăng nhập Quản lý ---
+            const workerView = document.getElementById('workerView');
+            const managerView = document.getElementById('managerView');
+            const workerBtn = document.getElementById('showWorkerViewBtn');
+            const managerBtn = document.getElementById('showManagerViewBtn');
+            const adminLoginSection = document.getElementById('adminLoginSection');
+            
+            workerBtn.addEventListener('click', () => {
+                workerView.style.display = 'block';
+                managerView.style.display = 'none';
+                adminLoginSection.classList.add('hidden'); // [SỬA ĐỔI]
+                workerBtn.classList.add('active');
+                managerBtn.classList.remove('active');
+            });
+
+            // [SỬA ĐỔI] Nút quản lý giờ chỉ hiện ô mật khẩu
+            managerBtn.addEventListener('click', () => {
+                adminLoginSection.classList.remove('hidden');
+                document.getElementById('adminPassword').focus();
+            });
+
+            // [THÊM MỚI] Nút Mở khóa
+            document.getElementById('adminLoginBtn').addEventListener('click', () => {
+                const password = document.getElementById('adminPassword').value;
+                if (password === _MANAGEMENT_SECRET_KEY_) {
+                    workerView.style.display = 'none';
+                    managerView.style.display = 'block';
+                    adminLoginSection.classList.add('hidden');
+                    workerBtn.classList.remove('active');
+                    managerBtn.classList.add('active');
+                    document.getElementById('adminPassword').value = ''; // Xóa mk
+                    showMessage('success', 'Đã mở khóa Giao diện Quản lý.');
+                } else {
+                    showMessage('error', 'Mật khẩu không chính xác.');
+                }
+            });
+
+            // --- Gắn sự kiện cho Modal Sửa ---
+            document.getElementById('editModalSaveBtn').addEventListener('click', handleSaveEdit);
+            const editModal = document.getElementById('editModal');
+            document.getElementById('editModalCancelBtn').addEventListener('click', () => editModal.classList.add('hidden'));
+            document.getElementById('editModalOverlay').addEventListener('click', () => editModal.classList.add('hidden'));
+            document.getElementById('editModalAddRowBtn').addEventListener('click', () => addEditMaterialRow());
+            
+            // Xóa dòng trong modal sửa
+            document.getElementById('editMaterialsTableBody').addEventListener('click', (e) => {
+                const deleteBtn = e.target.closest('.delete-edit-row-btn');
+                if (deleteBtn) {
+                    deleteBtn.closest('tr').remove();
+                }
+            });
+
+        });
+
+    </script>
+</body>
+</html>
+
+
